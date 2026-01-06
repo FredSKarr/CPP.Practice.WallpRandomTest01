@@ -12,6 +12,31 @@
 
 namespace fs = std::filesystem;
 
+std::vector<std::wstring> GetFilesPathsFromFolder(const std::wstring& folderPath) {
+    std::vector<std::wstring> wallpapers;
+
+    // Iterate through the directory and collect image files paths
+        /*A for-each structure where [const auto&] determine an auto variable type
+        entry its each path determinated in fs::directory_iterator*/
+    for (const auto& entry : fs::directory_iterator(folderPath)) {
+        // Check if the file is an image based on its extension
+        if (entry.is_regular_file()) {
+            // Get the file extension in wide string format
+            auto ext = entry.path().extension().wstring();
+            // Convert to lowercase for comparison, checking common image formats
+            if (ext == L".jpg" || ext == L".jpeg" || ext == L".png" || ext == L".bmp") {
+                wallpapers.push_back(entry.path().wstring()); // Add the wallpaper path to the list as a wide string
+            }
+        }
+    }
+    // If no wallpapers found, throw an error
+    if (wallpapers.empty()) {
+        throw std::runtime_error("No wallpapers found in folder.");
+
+    }
+    return wallpapers;
+}
+
 // Function wide string to get a random wallpaper from the specified folder path
     /*The argmument requested as [const std::wstring& folderpath] meas that a 
     wide string is expected and turns it into a pointer or reference */
@@ -19,24 +44,8 @@ std::wstring GetRandomWallpaper(const std::wstring& folderPath) {
 	// Vector to hold wallpaper file paths
     std::vector<std::wstring> wallpapers;
 
-	// Iterate through the directory and collect image files paths
-        /*A for-each structure where [const auto&] determine an auto variable type
-        entry its each path determinated in fs::directory_iterator*/
-    for (const auto& entry : fs::directory_iterator(folderPath)) {
-		// Check if the file is an image based on its extension
-        if (entry.is_regular_file()) {
-			// Get the file extension in wide string format
-            auto ext = entry.path().extension().wstring();
-			// Convert to lowercase for comparison, checking common image formats
-            if (ext == L".jpg" || ext == L".jpeg" || ext == L".png" || ext == L".bmp") {
-                wallpapers.push_back(entry.path().wstring()); // Add the wallpaper path to the list as a wide string
-            }
-        }
-    }
-	// If no wallpapers found, throw an error
-    if (wallpapers.empty()) {
-        throw std::runtime_error("No wallpapers found in folder.");
-    }
+	// Retrieve wallpaper file paths from the specified folder
+	wallpapers = GetFilesPathsFromFolder(folderPath);
 
 	// Randomly select a wallpaper from the list
 
