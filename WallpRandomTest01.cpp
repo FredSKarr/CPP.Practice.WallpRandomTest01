@@ -16,8 +16,6 @@ std::vector<std::wstring> GetFilesPathsFromFolder(const std::wstring& folderPath
     std::vector<std::wstring> wallpapers;
 
     // Iterate through the directory and collect image files paths
-        /*A for-each structure where [const auto&] determine an auto variable type
-        entry its each path determinated in fs::directory_iterator*/
     for (const auto& entry : fs::directory_iterator(folderPath)) {
         // Check if the file is an image based on its extension
         if (entry.is_regular_file()) {
@@ -40,28 +38,26 @@ std::vector<std::wstring> GetFilesPathsFromFolder(const std::wstring& folderPath
 // Function wide string to get a random wallpaper from the specified folder path
     /*The argmument requested as [const std::wstring& folderpath] meas that a 
     wide string is expected and turns it into a pointer or reference */
-std::wstring GetRandomWallpaper(const std::wstring& folderPath) {
+std::vector<std::wstring> GetRandomWallpapers(const std::wstring& folderPath, const UINT& count) {
 	// Vector to hold wallpaper file paths
-    std::vector<std::wstring> wallpapers;
+    std::vector<std::wstring> allWallpapers;
 
 	// Retrieve wallpaper file paths from the specified folder
-	wallpapers = GetFilesPathsFromFolder(folderPath);
+	allWallpapers = GetFilesPathsFromFolder(folderPath);
 
-	// Randomly select a wallpaper from the list
+    std::vector<std::wstring> selectedWallpapers;
+    for (UINT i = 0; i < count; i++) {
+        // Randomly select a wallpaper from the list
+        std::random_device rd; // non-deterministic random number generator
+        std::mt19937 gen(rd()); // Mersenne Twister random number generator initialized with random device
+        // Use size_t for the distribution bounds to avoid narrowing conversion warnings (C4267)
+        std::size_t maxIndex = allWallpapers.size() - 1;
+        // Uniform distribution to select an index within the range of available Wallpapers
+        std::uniform_int_distribution<std::size_t> dist(0, maxIndex);
 
-    std::random_device rd; // non-deterministic random number generator
-
-	// Mersenne Twister random number generator initialized with random device
-    std::mt19937 gen(rd());
-
-	// Use size_t for the distribution bounds to avoid narrowing conversion warnings (C4267)
-    std::size_t maxIndex = wallpapers.size() - 1;
-
-	// Uniform distribution to select an index within the range of available wallpapers
-    std::uniform_int_distribution<std::size_t> dist(0, maxIndex);
-
-	// Return the randomly selected wallpaper path
-    return wallpapers[dist(gen)];
+		selectedWallpapers.push_back(allWallpapers[dist(gen)]); // Add the randomly selected wallpaper to the list
+    }
+    return selectedWallpapers;
 }
 
 int main() {
@@ -83,10 +79,11 @@ int main() {
     if (SUCCEEDED(hr)) {
 		// Get the number of monitors
         UINT count = 0;
-        pWallpaper->GetMonitorDevicePathCount(&count);
+        pWallpaper->GetMonitorDevicePathCount(&count); 
 
-		// Specify the folder path containing wallpapers
-        std::wstring folderPath = L"D:\\Imagenes\\Wallpapers\\IA_Wallpapers_pack_03"; // Change to your folder path
+        std::wstring folderPath = L"D:\\Imagenes\\Wallpapers\\IA_Wallpapers_pack_03"; // Specify the folder path containing wallpapers
+
+		std::vector<std::wstring> wallpapers = GetRandomWallpapers(folderPath, count); // Get random wallpapers for each monitor
 
 		// Iterate through each monitor
         for (UINT i = 0; i < count; i++) {
@@ -97,7 +94,7 @@ int main() {
             if (SUCCEEDED(hrMonitor) && monitorId != nullptr) {
                 // Assign a random wallpaper from the folder
                 try {
-					std::wstring wallpaperPath = GetRandomWallpaper(folderPath); // Get a random wallpaper
+					std::wstring wallpaperPath = wallpapers[i]; // Get a random wallpaper
 					pWallpaper->SetWallpaper(monitorId, wallpaperPath.c_str()); // Set the wallpaper for the monitor
 					std::wcout << L"Monitor " << i << L": " << wallpaperPath << std::endl; // Output the assigned wallpaper path
                 }
