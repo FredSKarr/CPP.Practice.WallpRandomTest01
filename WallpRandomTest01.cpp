@@ -13,6 +13,21 @@
 
 namespace fs = std::filesystem;
 
+static std::vector<std::wstring>GetHistoyLogFromFile(const std::string& filename) {
+    std::vector<std::wstring> historyLog;
+    std::wifstream inFile(filename);
+    if (inFile.is_open()) {
+        std::wstring line;
+        while (std::getline(inFile, line)) {
+            historyLog.push_back(line);
+        }
+        inFile.close();
+    } else {
+        std::cerr << "Unable to open history log file: " << filename << std::endl;
+    }
+    return historyLog;
+}
+
 static std::vector<std::wstring> GetFilesPathsFromFolder(const std::wstring& folderPath) {
     std::vector<std::wstring> wallpapers;
 
@@ -45,18 +60,49 @@ static std::vector<std::wstring> GetRandomWallpapers(const std::wstring& folderP
 
 	std::string pathLog = "wallpaper_paths_log.txt"; // Log file to store wallpaper paths
 
+	std::vector<std::wstring> historyLog = GetHistoyLogFromFile(pathLog); // Retrieve history log from file
+	UINT maxLinesInLog = allWallpapers.size(); // Maximum number of lines to keep in the history log (equal to total wallpapers)
+    if (historyLog.size() > maxLinesInLog) {
+		std::wofstream outfile(pathLog, std::ios::trunc); // Open the log file in truncate mode to clear it
+        if (outfile.is_open()) {
+            outfile.close(); // Close the file after truncating
+        } else {
+            std::cerr << "Unable to open log file for truncating: " << pathLog << std::endl; // Error message if log file cannot be opened
+        }
+		historyLog.clear(); // Clear the in-memory history log
+	}
+
+    if (allWallpapers.size() <= count) {
+		return allWallpapers; // If available wallpapers are less than or equal to count, return all
+	}
+
 	std::vector<std::wstring> selectedWallpapers; // Vector to hold selected random wallpapers
 
-    for (UINT i = 0; i < count; i++) {
-        // Randomly select a wallpaper from the list
-        std::random_device rd; // non-deterministic random number generator
-        std::mt19937 gen(rd()); // Mersenne Twister random number generator initialized with random device
-        // Use size_t for the distribution bounds to avoid narrowing conversion warnings (C4267)
-        std::size_t maxIndex = allWallpapers.size() - 1;
-        // Uniform distribution to select an index within the range of available Wallpapers
-        std::uniform_int_distribution<std::size_t> dist(0, maxIndex);
+	bool success = false; // Flag to indicate successful selection of wallpaper
 
-		selectedWallpapers.push_back(allWallpapers[dist(gen)]); // Add the randomly selected wallpaper to the list
+	// Select random wallpapers based on the count of monitors
+    while (!success) {
+        for (UINT i = 0; i < count; i++) {
+            // Randomly select a wallpaper from the list
+            std::random_device rd; // non-deterministic random number generator
+            std::mt19937 gen(rd()); // Mersenne Twister random number generator initialized with random device
+            // Use size_t for the distribution bounds to avoid narrowing conversion warnings (C4267)
+            std::size_t maxIndex = allWallpapers.size() - 1;
+            // Uniform distribution to select an index within the range of available Wallpapers
+            std::uniform_int_distribution<std::size_t> dist(0, maxIndex);
+			// Iterate through the history log in reverse order
+			for (auto it = historyLog.rbegin(); it != historyLog.rend(); ++it) {
+                // Check if the randomly selected wallpaper is in the history log
+                if (*it == allWallpapers[dist(gen)]) {
+                    break; // If found in history, break to select a new wallpaper
+                }
+                // If reached the end of history log without finding a match, selection is successful
+                if (it + 1 == historyLog.rend()) {
+                    success = true;
+                }
+            }
+            selectedWallpapers.push_back(allWallpapers[dist(gen)]); // Add the randomly selected wallpaper to the list
+        }
     }
 	// If no wallpapers were selected, throw an error
     if (selectedWallpapers.empty()) {
