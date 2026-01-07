@@ -9,10 +9,11 @@
 #include <string>
 #include <filesystem>
 #include <random>
+#include <fstream>
 
 namespace fs = std::filesystem;
 
-std::vector<std::wstring> GetFilesPathsFromFolder(const std::wstring& folderPath) {
+static std::vector<std::wstring> GetFilesPathsFromFolder(const std::wstring& folderPath) {
     std::vector<std::wstring> wallpapers;
 
     // Iterate through the directory and collect image files paths
@@ -30,22 +31,22 @@ std::vector<std::wstring> GetFilesPathsFromFolder(const std::wstring& folderPath
     // If no wallpapers found, throw an error
     if (wallpapers.empty()) {
         throw std::runtime_error("No wallpapers found in folder.");
-
     }
+
     return wallpapers;
 }
 
 // Function wide string to get a random wallpaper from the specified folder path
     /*The argmument requested as [const std::wstring& folderpath] meas that a 
     wide string is expected and turns it into a pointer or reference */
-std::vector<std::wstring> GetRandomWallpapers(const std::wstring& folderPath, const UINT& count) {
-	// Vector to hold wallpaper file paths
-    std::vector<std::wstring> allWallpapers;
+static std::vector<std::wstring> GetRandomWallpapers(const std::wstring& folderPath, const UINT& count) {
+	// Get all wallpaper file paths from the specified folder
+    std::vector<std::wstring> allWallpapers = GetFilesPathsFromFolder(folderPath);
 
-	// Retrieve wallpaper file paths from the specified folder
-	allWallpapers = GetFilesPathsFromFolder(folderPath);
+	std::string pathLog = "wallpaper_paths_log.txt"; // Log file to store wallpaper paths
 
-    std::vector<std::wstring> selectedWallpapers;
+	std::vector<std::wstring> selectedWallpapers; // Vector to hold selected random wallpapers
+
     for (UINT i = 0; i < count; i++) {
         // Randomly select a wallpaper from the list
         std::random_device rd; // non-deterministic random number generator
@@ -57,6 +58,20 @@ std::vector<std::wstring> GetRandomWallpapers(const std::wstring& folderPath, co
 
 		selectedWallpapers.push_back(allWallpapers[dist(gen)]); // Add the randomly selected wallpaper to the list
     }
+	// If no wallpapers were selected, throw an error
+    if (selectedWallpapers.empty()) {
+        throw std::runtime_error("No wallpapers selected in folder.");
+	}
+
+	std::wofstream outFile(pathLog, std::ios::app); // Open the log file for writing
+	if (outFile.is_open()) {
+        for (const auto& wallpaperPath : selectedWallpapers) {
+            outFile << wallpaperPath << std::endl; // Write each selected wallpaper path to the log file
+        }
+		outFile.close(); // Close the log file
+        } else {
+        std::cerr << "Unable to open log file: " << pathLog << std::endl; // Error message if log file cannot be opened
+	}
     return selectedWallpapers;
 }
 
@@ -94,7 +109,7 @@ int main() {
             if (SUCCEEDED(hrMonitor) && monitorId != nullptr) {
                 // Assign a random wallpaper from the folder
                 try {
-					std::wstring wallpaperPath = wallpapers[i]; // Get a random wallpaper
+					std::wstring wallpaperPath = wallpapers[i]; // Get the wallpaper path for the current monitor
 					pWallpaper->SetWallpaper(monitorId, wallpaperPath.c_str()); // Set the wallpaper for the monitor
 					std::wcout << L"Monitor " << i << L": " << wallpaperPath << std::endl; // Output the assigned wallpaper path
                 }
