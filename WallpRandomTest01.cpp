@@ -61,7 +61,7 @@ static std::vector<std::wstring> GetRandomWallpapers(const std::wstring& folderP
 	std::string pathLog = "wallpaper_paths_log.txt"; // Log file to store wallpaper paths
 
 	std::vector<std::wstring> historyLog = GetHistoyLogFromFile(pathLog); // Retrieve history log from file
-	UINT maxLinesInLog = allWallpapers.size(); // Maximum number of lines to keep in the history log (equal to total wallpapers)
+	std::size_t maxLinesInLog = allWallpapers.size(); // Maximum number of lines to keep in the history log (equal to total wallpapers)
     if (historyLog.size() > maxLinesInLog) {
 		std::wofstream outfile(pathLog, std::ios::trunc); // Open the log file in truncate mode to clear it
         if (outfile.is_open()) {
@@ -81,29 +81,37 @@ static std::vector<std::wstring> GetRandomWallpapers(const std::wstring& folderP
 	bool success = false; // Flag to indicate successful selection of wallpaper
 
 	// Select random wallpapers based on the count of monitors
-    while (!success) {
-        for (UINT i = 0; i < count; i++) {
-            // Randomly select a wallpaper from the list
-            std::random_device rd; // non-deterministic random number generator
-            std::mt19937 gen(rd()); // Mersenne Twister random number generator initialized with random device
-            // Use size_t for the distribution bounds to avoid narrowing conversion warnings (C4267)
-            std::size_t maxIndex = allWallpapers.size() - 1;
-            // Uniform distribution to select an index within the range of available Wallpapers
+   
+    for (UINT i = 0; i < count; i++) {
+		success = false;
+        // Randomly select a wallpaper from the list
+        std::random_device rd; // non-deterministic random number generator
+        std::mt19937 gen(rd()); // Mersenne Twister random number generator initialized with random device
+        // Use size_t for the distribution bounds to avoid narrowing conversion warnings (C4267)
+        std::size_t maxIndex = allWallpapers.size() - 1;
+        // Uniform distribution to select an index within the range of available Wallpapers
+        while (!success) {
             std::uniform_int_distribution<std::size_t> dist(0, maxIndex);
-			// Iterate through the history log in reverse order
-			for (auto it = historyLog.rbegin(); it != historyLog.rend(); ++it) {
+            // Iterate through the history log in reverse order
+            if (historyLog.size() == 0) {
+                selectedWallpapers.push_back(allWallpapers[dist(gen)]); // If history log is empty, select any wallpaper
+                success = true;
+                continue;
+            }
+            for (auto it = historyLog.rbegin(); it != historyLog.rend(); ++it) {
                 // Check if the randomly selected wallpaper is in the history log
                 if (*it == allWallpapers[dist(gen)]) {
                     break; // If found in history, break to select a new wallpaper
                 }
                 // If reached the end of history log without finding a match, selection is successful
                 if (it + 1 == historyLog.rend()) {
+                    selectedWallpapers.push_back(allWallpapers[dist(gen)]); // Add the randomly selected wallpaper to the list
                     success = true;
                 }
             }
-            selectedWallpapers.push_back(allWallpapers[dist(gen)]); // Add the randomly selected wallpaper to the list
-        }
+        }   
     }
+    
 	// If no wallpapers were selected, throw an error
     if (selectedWallpapers.empty()) {
         throw std::runtime_error("No wallpapers selected in folder.");
@@ -142,7 +150,7 @@ int main() {
         UINT count = 0;
         pWallpaper->GetMonitorDevicePathCount(&count); 
 
-        std::wstring folderPath = L"D:\\Imagenes\\Wallpapers\\IA_Wallpapers_pack_03"; // Specify the folder path containing wallpapers
+        std::wstring folderPath = L"D:\\Imagenes\\Wallpapers\\IA_Wallpapers_pack_02"; // Specify the folder path containing wallpapers
 
 		std::vector<std::wstring> wallpapers = GetRandomWallpapers(folderPath, count); // Get random wallpapers for each monitor
 
