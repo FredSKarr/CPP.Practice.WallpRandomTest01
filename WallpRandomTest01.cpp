@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <random>
 #include <fstream>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
 
@@ -39,34 +40,25 @@ static int clearLogFile(const std::string& filename) {
     }
 }
 
-static std::vector<std::wstring> RandomizeWallpapers(const std::vector<std::wstring>& availableWallpapers,  const UINT& count) {
-	std::vector<std::wstring> selectedWallpapers;
-    for (UINT i = 0; i < count; i++) {
-        std::random_device rd; // non-deterministic random number generator
-        std::mt19937 gen(rd()); // Mersenne Twister random number generator initialized with random device
-        std::size_t maxIndex = availableWallpapers.size() - 1;
-        // Uniform distribution to select an index within the range of available Wallpapers
-        std::uniform_int_distribution<std::size_t> dist(0, maxIndex);
-        selectedWallpapers.push_back(availableWallpapers[dist(gen)]); // Add the randomly selected wallpaper to the list
-    }
-	return selectedWallpapers;
+static std::vector<std::wstring> RandomizeWallpapers(std::vector<std::wstring> availableWallpapers, const UINT& count) {
+	std::random_device rd; // Obtain a random number from hardware
+	std::mt19937 gen(rd()); // Seed the generator
+	std::shuffle(availableWallpapers.begin(), availableWallpapers.end(), gen); // Shuffle the wallpapers
+
+	size_t actualCount = (std::min)(static_cast<size_t>(count), availableWallpapers.size()); // Ensure we don't exceed available wallpapers
+	return std::vector<std::wstring>(availableWallpapers.begin(), availableWallpapers.begin() + actualCount); // Return the first 'count' wallpapers
 }
 
 static std::vector<std::wstring> GetAvailableWallpapers(const std::vector<std::wstring>& allWallpapers, const std::vector<std::wstring>& historyLog) {
-	std::vector<std::wstring> availableWallpapers;
-    for (const auto& path : allWallpapers) {
-        bool inHistory = false;
-        for (const auto& h : historyLog) {
-            if (path == h) {
-                inHistory = true;
-                break;
-            }
-        }
-        if (!inHistory) {
-            availableWallpapers.push_back(path);
+	// Create a set from the history log for efficient lookup
+    std::unordered_set<std::wstring> historySet(historyLog.begin(), historyLog.end());
+    std::vector<std::wstring> available;
+	for (const auto& path : allWallpapers) { // Check if the wallpaper is not in history
+        if (historySet.find(path) == historySet.end()) {
+			available.push_back(path); // Add to available wallpapers
         }
     }
-	return availableWallpapers;
+    return available;
 }
 
 static std::vector<std::wstring>GetHistoyLogFromFile(const std::string& filename) {
@@ -86,24 +78,18 @@ static std::vector<std::wstring>GetHistoyLogFromFile(const std::string& filename
 
 static std::vector<std::wstring> GetFilesPathsFromFolder(const std::wstring& folderPath) {
     std::vector<std::wstring> wallpapers;
-
-    // Iterate through the directory and collect image files paths
-    for (const auto& entry : fs::directory_iterator(folderPath)) {
-        // Check if the file is an image based on its extension
+    // Use recursive_directory_iterator to find images in subfolders
+    for (const auto& entry : fs::recursive_directory_iterator(folderPath)) {
         if (entry.is_regular_file()) {
-            // Get the file extension in wide string format
-            auto ext = entry.path().extension().wstring();
-            // Convert to lowercase for comparison, checking common image formats
+            std::wstring ext = entry.path().extension().wstring();
+            // Convert to lowercase for case-insensitive comparison
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
             if (ext == L".jpg" || ext == L".jpeg" || ext == L".png" || ext == L".bmp") {
-                wallpapers.push_back(entry.path().wstring()); // Add the wallpaper path to the list as a wide string
+				wallpapers.push_back(entry.path().wstring()); // Store full file path
             }
         }
     }
-    // If no wallpapers found, throw an error
-    if (wallpapers.empty()) {
-        throw std::runtime_error("No wallpapers found in folder.");
-    }
-
+    if (wallpapers.empty()) throw std::runtime_error("No wallpapers found.");
     return wallpapers;
 }
 
