@@ -13,6 +13,62 @@
 
 namespace fs = std::filesystem;
 
+static int writeLogFile(const std::string& filename, const std::vector<std::wstring>& logEntries) {
+    std::wofstream outFile(filename, std::ios::app);
+    if (outFile.is_open()) {
+        for (const auto& entry : logEntries) {
+            outFile << entry << std::endl;
+        }
+        outFile.close();
+        return 0; // Success
+    } else {
+        std::cerr << "Unable to open log file for writing: " << filename << std::endl;
+        return -1; // Failure
+    }
+}
+
+static int clearLogFile(const std::string& filename) {
+    std::ofstream outFile(filename, std::ios::trunc);
+    if (outFile.is_open()) {
+        outFile.close();
+        return 0; // Success
+		std::cout << "Log file cleared: " << filename << std::endl;
+    } else {
+        std::cerr << "Unable to open log file for clearing: " << filename << std::endl;
+        return -1; // Failure
+    }
+}
+
+static std::vector<std::wstring> RandomizeWallpapers(const std::vector<std::wstring>& availableWallpapers,  const UINT& count) {
+	std::vector<std::wstring> selectedWallpapers;
+    for (UINT i = 0; i < count; i++) {
+        std::random_device rd; // non-deterministic random number generator
+        std::mt19937 gen(rd()); // Mersenne Twister random number generator initialized with random device
+        std::size_t maxIndex = availableWallpapers.size() - 1;
+        // Uniform distribution to select an index within the range of available Wallpapers
+        std::uniform_int_distribution<std::size_t> dist(0, maxIndex);
+        selectedWallpapers.push_back(availableWallpapers[dist(gen)]); // Add the randomly selected wallpaper to the list
+    }
+	return selectedWallpapers;
+}
+
+static std::vector<std::wstring> GetAvailableWallpapers(const std::vector<std::wstring>& allWallpapers, const std::vector<std::wstring>& historyLog) {
+	std::vector<std::wstring> availableWallpapers;
+    for (const auto& path : allWallpapers) {
+        bool inHistory = false;
+        for (const auto& h : historyLog) {
+            if (path == h) {
+                inHistory = true;
+                break;
+            }
+        }
+        if (!inHistory) {
+            availableWallpapers.push_back(path);
+        }
+    }
+	return availableWallpapers;
+}
+
 static std::vector<std::wstring>GetHistoyLogFromFile(const std::string& filename) {
     std::vector<std::wstring> historyLog;
     std::wifstream inFile(filename);
@@ -51,85 +107,43 @@ static std::vector<std::wstring> GetFilesPathsFromFolder(const std::wstring& fol
     return wallpapers;
 }
 
-// Function wide string to get a random wallpaper from the specified folder path
-    /*The argmument requested as [const std::wstring& folderpath] meas that a 
-    wide string is expected and turns it into a pointer or reference */
-static std::vector<std::wstring> GetRandomWallpapers(const std::wstring& folderPath, const UINT& count) {
+static std::vector<std::wstring> GetRandomWallpapers(const std::wstring& folderPath, const UINT& count, const std::string& pathLog) {
 	// Get all wallpaper file paths from the specified folder
     std::vector<std::wstring> allWallpapers = GetFilesPathsFromFolder(folderPath);
-
-	std::string pathLog = "wallpaper_paths_log.txt"; // Log file to store wallpaper paths
+    if (allWallpapers.size() <= count) {
+        throw std::runtime_error("There are not enough wallpapers for all monitors in selected folder.");
+    }
 
 	std::vector<std::wstring> historyLog = GetHistoyLogFromFile(pathLog); // Retrieve history log from file
 	std::size_t maxLinesInLog = allWallpapers.size(); // Maximum number of lines to keep in the history log (equal to total wallpapers)
     if (historyLog.size() > maxLinesInLog) {
-		std::wofstream outfile(pathLog, std::ios::trunc); // Open the log file in truncate mode to clear it
-        if (outfile.is_open()) {
-            outfile.close(); // Close the file after truncating
-        } else {
-            std::cerr << "Unable to open log file for truncating: " << pathLog << std::endl; // Error message if log file cannot be opened
-        }
+		clearLogFile(pathLog); // Clear the log file if it exceeds maximum lines
 		historyLog.clear(); // Clear the in-memory history log
 	}
 
-    if (allWallpapers.size() <= count) {
-		return allWallpapers; // If available wallpapers are less than or equal to count, return all
-	}
+    // 1. Find all wallpapers that ARE NOT in history
+    std::vector<std::wstring> availableWallpapers = GetAvailableWallpapers(allWallpapers,historyLog);
 
-	std::vector<std::wstring> selectedWallpapers; // Vector to hold selected random wallpapers
+    // 2. Adjust count if we don't have enough remaining
+    size_t finalCount = (std::min)(static_cast<size_t>(count), availableWallpapers.size());
 
-	bool success = false; // Flag to indicate successful selection of wallpaper
+    std::vector<std::wstring> selectedWallpapers; // Vector to hold selected random wallpapers
 
-	// Select random wallpapers based on the count of monitors
-   
-    for (UINT i = 0; i < count; i++) {
-		success = false;
-        // Randomly select a wallpaper from the list
-        std::random_device rd; // non-deterministic random number generator
-        std::mt19937 gen(rd()); // Mersenne Twister random number generator initialized with random device
-        // Use size_t for the distribution bounds to avoid narrowing conversion warnings (C4267)
-        std::size_t maxIndex = allWallpapers.size() - 1;
-        // Uniform distribution to select an index within the range of available Wallpapers
-        while (!success) {
-            std::uniform_int_distribution<std::size_t> dist(0, maxIndex);
-            // Iterate through the history log in reverse order
-            if (historyLog.size() == 0) {
-                selectedWallpapers.push_back(allWallpapers[dist(gen)]); // If history log is empty, select any wallpaper
-                success = true;
-                continue;
-            }
-            for (auto it = historyLog.rbegin(); it != historyLog.rend(); ++it) {
-                // Check if the randomly selected wallpaper is in the history log
-                if (*it == allWallpapers[dist(gen)]) {
-                    break; // If found in history, break to select a new wallpaper
-                }
-                // If reached the end of history log without finding a match, selection is successful
-                if (it + 1 == historyLog.rend()) {
-                    selectedWallpapers.push_back(allWallpapers[dist(gen)]); // Add the randomly selected wallpaper to the list
-                    success = true;
-                }
-            }
-        }   
+    // If the number of selected wallpapers doesn't match the monitor count, clear the log and reselect
+    if (finalCount < count) {
+        clearLogFile(pathLog); // Clear the log file if selected wallpapers count doesn't match monitor count
+		selectedWallpapers = RandomizeWallpapers(allWallpapers, count); // Reselect wallpapers from all available ones
+    } else {
+        // 3. Randomly select wallpapers from the available ones
+		selectedWallpapers = RandomizeWallpapers(availableWallpapers, count);
     }
-    
-	// If no wallpapers were selected, throw an error
-    if (selectedWallpapers.empty()) {
-        throw std::runtime_error("No wallpapers selected in folder.");
-	}
-
-	std::wofstream outFile(pathLog, std::ios::app); // Open the log file for writing
-	if (outFile.is_open()) {
-        for (const auto& wallpaperPath : selectedWallpapers) {
-            outFile << wallpaperPath << std::endl; // Write each selected wallpaper path to the log file
-        }
-		outFile.close(); // Close the log file
-        } else {
-        std::cerr << "Unable to open log file: " << pathLog << std::endl; // Error message if log file cannot be opened
-	}
     return selectedWallpapers;
 }
 
 int main() {
+
+    std::string pathLog = "wallpaper_paths_log.txt"; // Log file to store wallpaper paths
+
 	// Initialize COM library
     HRESULT hrc = CoInitialize(NULL);
     
@@ -150,9 +164,11 @@ int main() {
         UINT count = 0;
         pWallpaper->GetMonitorDevicePathCount(&count); 
 
-        std::wstring folderPath = L"D:\\Imagenes\\Wallpapers\\IA_Wallpapers_pack_02"; // Specify the folder path containing wallpapers
+        std::wstring folderPath = L"D:\\Imagenes\\Wallpapers\\IA_Wallpapers_pack_03"; // Specify the folder path containing wallpapers
 
-		std::vector<std::wstring> wallpapers = GetRandomWallpapers(folderPath, count); // Get random wallpapers for each monitor
+		std::vector<std::wstring> wallpapers = GetRandomWallpapers(folderPath, count, pathLog); // Get random wallpapers for each monitor
+
+		std::vector<std::wstring> usedWallpapers; // Vector to keep track of used wallpapers
 
 		// Iterate through each monitor
         for (UINT i = 0; i < count; i++) {
@@ -161,15 +177,26 @@ int main() {
             
 			// Check if the monitor ID retrieval was successful
             if (SUCCEEDED(hrMonitor) && monitorId != nullptr) {
-                // Assign a random wallpaper from the folder
-                try {
-					std::wstring wallpaperPath = wallpapers[i]; // Get the wallpaper path for the current monitor
-					pWallpaper->SetWallpaper(monitorId, wallpaperPath.c_str()); // Set the wallpaper for the monitor
-					std::wcout << L"Monitor " << i << L": " << wallpaperPath << std::endl; // Output the assigned wallpaper path
-                }
-				// Handle any errors that occur during wallpaper assignment
-                catch (const std::exception& e) {
-                    std::cerr << "Error: " << e.what() << std::endl;
+				RECT monitorRect;
+				if (SUCCEEDED(pWallpaper->GetMonitorRECT(monitorId, &monitorRect))) {
+					int width = monitorRect.right - monitorRect.left;
+					int height = monitorRect.bottom - monitorRect.top;
+
+					if (width > 0 && height > 0) {
+                        // Assign a random wallpaper from the folder
+                            try {
+                                std::wstring wallpaperPath = wallpapers[i]; // Get the wallpaper path for the current monitor
+                                pWallpaper->SetWallpaper(monitorId, wallpaperPath.c_str()); // Set the wallpaper for the monitor
+                                std::wcout << L"Monitor " << i << L": " << wallpaperPath << std::endl; // Output the assigned wallpaper path
+								usedWallpapers.push_back(wallpaperPath); // Add the wallpaper path to the used wallpapers log
+                            }
+                            // Handle any errors that occur during wallpaper assignment
+                            catch (const std::exception& e) {
+                                std::cerr << "Error: " << e.what() << std::endl;
+                            }
+
+                    }
+
                 }
 				// Free the allocated memory for monitorId
                 CoTaskMemFree(monitorId);
@@ -177,6 +204,7 @@ int main() {
         }
 		// Release the IDesktopWallpaper instance
         pWallpaper->Release();
+        writeLogFile(pathLog, usedWallpapers); // Write the used wallpapers to the log file
     }
     else {
 		std::cerr << "Failed to initialize IDesktopWallpaper." << std::endl; // Error message if instance creation fails
